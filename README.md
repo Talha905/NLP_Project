@@ -171,6 +171,9 @@ NLP_Project/
 
 ## 🚀 Quickstart Guide
 
+> 💡 **Pulling this repository? No Ollama installed?**  
+> Check out the **[HOW TO RUN GUIDE (With or Without Ollama)](HOW_TO_RUN.md)** for a complete step-by-step walkthrough. The project runs 100% out of the box with zero external dependencies!
+
 ### 1. Prerequisites
 - Python 3.10+ installed
 - *(Optional)* [Ollama](https://ollama.com) installed with lightweight local models (e.g. `ollama run qwen2.5:3b` or `ollama run llama3.2`).

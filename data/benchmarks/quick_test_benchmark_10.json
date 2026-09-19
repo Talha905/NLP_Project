@@ -1,0 +1,92 @@
+[
+  {
+    "id": "q1",
+    "domain": "nlp",
+    "question": "What mathematical formula defines the scaled dot-product attention in the Transformer?",
+    "gold_answer": "Attention(Q, K, V) = softmax((Q * K^T) / sqrt(d_k)) * V",
+    "gold_evidence": "The scaled dot-product attention formula is mathematically defined as: Attention(Q, K, V) = softmax((Q * K^T) / sqrt(d_k)) * V where Q represents queries, K represents keys, V represents values, and d_k is the dimensionality of the key vectors.",
+    "question_type": "factoid",
+    "difficulty": "easy"
+  },
+  {
+    "id": "q2",
+    "domain": "nlp",
+    "question": "Why is the scaling factor 1/sqrt(d_k) used in scaled dot-product attention?",
+    "gold_answer": "It prevents dot products from growing excessively large for high dimensions, which would push softmax into regions with dangerously small gradients.",
+    "gold_evidence": "The scaling factor 1/sqrt(d_k) prevents the dot products from growing excessively large for high dimensions, which would otherwise push the softmax function into regions with dangerously small gradients.",
+    "question_type": "reasoning",
+    "difficulty": "medium"
+  },
+  {
+    "id": "q3",
+    "domain": "nlp",
+    "question": "What structural refinements do modern LLMs like LLaMA incorporate beyond standard Transformer architectures?",
+    "gold_answer": "RMSNorm for training stability, SwiGLU activation functions, and Grouped-Query Attention (GQA) to reduce KV cache memory.",
+    "gold_evidence": "They incorporate structural refinements including RMSNorm (Root Mean Square Normalization) for training stability, SwiGLU activation functions in feed-forward layers, and Grouped-Query Attention (GQA) to minimize Key-Value (KV) cache memory footprint during autoregressive decoding.",
+    "question_type": "multi-hop",
+    "difficulty": "medium"
+  },
+  {
+    "id": "q4",
+    "domain": "nlp",
+    "question": "What is the mathematical formulation of Reciprocal Rank Fusion (RRF)?",
+    "gold_answer": "RRF_score(d) = sum_{m in models} 1 / (k_rrf + rank_m(d))",
+    "gold_evidence": "Reciprocal Rank Fusion (RRF) is the gold standard for rank aggregation: RRF_score(d) = sum_{m in models} 1 / (k_rrf + rank_m(d)) where k_rrf is a constant (typically 60).",
+    "question_type": "factoid",
+    "difficulty": "medium"
+  },
+  {
+    "id": "q5",
+    "domain": "quantum",
+    "question": "What is the asymptotic time complexity of Shor's algorithm for integer prime factorization?",
+    "gold_answer": "O((log N)^2 * (log log N) * (log log log N))",
+    "gold_evidence": "Shor's Algorithm: Discovered by Peter Shor in 1994, it solves the integer prime factorization problem in polynomial time O((log N)^2 * (log log N) * (log log log N)), compared to the best-known classical General Number Field Sieve (GNFS)",
+    "question_type": "factoid",
+    "difficulty": "hard"
+  },
+  {
+    "id": "q6",
+    "domain": "quantum",
+    "question": "Compare the operating temperatures, coherence times, and gate speeds between superconducting transmons and trapped ion qubits.",
+    "gold_answer": "Superconducting transmons operate below 15 mK with fast gate speeds (10-100 ns) but short coherence times (<100 us). Trapped ions operate with ultra-long coherence times (seconds to hours) and high fidelity (>99.9%) but slower gate speeds (10-100 us).",
+    "gold_evidence": "Superconducting Qubits: Employ transmon qubits constructed from Josephson junctions operating at dilution refrigerator temperatures (below 15 millikelvin)... rapid gate speeds (~10 to 100 nanoseconds) and short coherence times (under 100 microseconds). Trapped Ion Qubits: identical natural qubits with ultra-long coherence times (seconds to hours) and high gate fidelities exceeding 99.9%. Disadvantages: slower gate operation speeds (~10 to 100 microseconds).",
+    "question_type": "multi-hop",
+    "difficulty": "hard"
+  },
+  {
+    "id": "q7",
+    "domain": "climate",
+    "question": "What is the 100-year Global Warming Potential (GWP-100) of methane compared to carbon dioxide?",
+    "gold_answer": "Methane has a GWP-100 of 28 to 36 times that of CO2 over a 100-year horizon.",
+    "gold_evidence": "Methane (CH4), although shorter-lived in the atmosphere with an atmospheric lifetime of approximately 12 years, has a Global Warming Potential (GWP-100) of 28 to 36 times that of CO2 over a 100-year horizon",
+    "question_type": "factoid",
+    "difficulty": "easy"
+  },
+  {
+    "id": "q8",
+    "domain": "climate",
+    "question": "What is the chemical reaction mechanism describing ocean acidification when CO2 dissolves in seawater?",
+    "gold_answer": "CO2 + H2O <-> H2CO3 <-> HCO3- + H+",
+    "gold_evidence": "Dissolved CO2 reacts with seawater to form carbonic acid (H2CO3), which dissociates into bicarbonate (HCO3-) and hydrogen ions (H+): CO2 + H2O <-> H2CO3 <-> HCO3- + H+",
+    "question_type": "factoid",
+    "difficulty": "medium"
+  },
+  {
+    "id": "q9",
+    "domain": "climate",
+    "question": "Explain the positive ice-albedo feedback loop mechanism in the Arctic.",
+    "gold_answer": "Sea ice has high albedo reflecting up to 80% of sunlight. As ice melts, darker ocean with albedo ~0.06 absorbs 90% of solar radiation, warming seawater and causing further ice melt.",
+    "gold_evidence": "Ice-Albedo Feedback: Highly reflective sea ice reflects up to 80% of incoming solar insolation. As ice melts, darker open ocean waters with an albedo of only ~0.06 absorb 90% of solar radiation, heating local seawater and accelerating further ice melt.",
+    "question_type": "reasoning",
+    "difficulty": "medium"
+  },
+  {
+    "id": "q10",
+    "domain": "general",
+    "question": "What was the exact battery capacity and warp drive core temperature of the Apollo 11 lunar module?",
+    "gold_answer": "Unanswerable / Not present in knowledge base. The Apollo 11 lunar module did not have a warp drive core.",
+    "gold_evidence": "UNANSWERABLE_ADVERSARIAL_QUERY",
+    "question_type": "adversarial",
+    "difficulty": "hard"
+  }
+]

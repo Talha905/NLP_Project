@@ -1,0 +1,23 @@
+# Global Climate Dynamics, Carbon Budgets, and Mitigation Pathways
+
+## 1. Greenhouse Gas Radiative Forcing and Energy Balance
+The Earth's climate system is governed by the planetary energy balance between incoming solar shortwave radiation (~340 W/m^2 globally averaged) and outgoing terrestrial longwave infrared radiation. Naturally occurring greenhouse gases (primarily water vapor H2O, carbon dioxide CO2, methane CH4, and nitrous oxide N2O) absorb and re-emit infrared radiation, establishing a natural greenhouse effect that maintains Earth's global mean surface temperature at approximately 14°C instead of an uninhabitable -18°C.
+
+Anthropogenic emissions have increased atmospheric CO2 concentrations from pre-industrial levels of ~280 ppm (parts per million) in 1750 to over 420 ppm today. Carbon dioxide contributes approximately 66% of total radiative forcing from long-lived greenhouse gases. Methane (CH4), although shorter-lived in the atmosphere with an atmospheric lifetime of approximately 12 years, has a Global Warming Potential (GWP-100) of 28 to 36 times that of CO2 over a 100-year horizon, and even higher (over 80 times) over a 20-year horizon.
+
+## 2. Ocean Heat Uptake and Acidification
+The global ocean serves as the primary heat sink for the climate system, absorbing more than 90% of excess heat trapped by greenhouse gases between 1971 and today. Thermal expansion of warming seawater, combined with mass loss from glaciers and Greenland and Antarctic ice sheets, drives global mean sea level rise, currently accelerating at ~3.7 mm per year.
+
+Simultaneously, oceans absorb approximately 25% of annual anthropogenic CO2 emissions. Dissolved CO2 reacts with seawater to form carbonic acid (H2CO3), which dissociates into bicarbonate (HCO3-) and hydrogen ions (H+):
+CO2 + H2O <-> H2CO3 <-> HCO3- + H+
+The resulting increase in H+ ion concentration lowers ocean pH (ocean acidification). Since the industrial revolution, surface ocean pH has declined from 8.2 to 8.1, representing an approximate 30% increase in hydrogen ion acidity. This reduces the saturation state of calcium carbonate minerals (calcite and aragonite), threatening calcifying marine organisms such as corals, pteropods, and shellfish.
+
+## 3. Climate Tipping Points and Positive Feedback Loops
+A climate tipping point occurs when a small perturbation triggers non-linear, self-reinforcing, and potentially irreversible changes in a sub-system of the Earth. Key tipping dynamics include:
+1. Ice-Albedo Feedback: Highly reflective sea ice reflects up to 80% of incoming solar insolation. As ice melts, darker open ocean waters with an albedo of only ~0.06 absorb 90% of solar radiation, heating local seawater and accelerating further ice melt.
+2. Permafrost Carbon Feedback: Arctic permafrost soils hold approximately 1,400 to 1,600 gigatons of organic carbon. Warming accelerates microbial decomposition, releasing massive volumes of CO2 and methane into the atmosphere.
+3. Atlantic Meridional Overturning Circulation (AMOC): Freshwater influx from Greenland meltwater reduces surface water salinity and density, weakening the thermohaline circulation that transports warm equatorial waters northward.
+
+## 4. IPCC Emission Pathways and the Carbon Budget
+The Intergovernmental Panel on Climate Change (IPCC) Sixth Assessment Report (AR6) outlines Shared Socioeconomic Pathways (SSPs) spanning from SSP1-1.9 (very low emissions, limiting global warming to ~1.5°C with minimal overshoot) to SSP5-8.5 (very high fossil-fuel intensive emissions).
+The remaining global carbon budget estimates the cumulative net amount of CO2 that human activities can emit while maintaining a given probability of limiting warming below a specific temperature threshold. For a 50% probability of limiting global warming to 1.5°C above pre-industrial levels, the remaining carbon budget from 2020 onward was estimated at approximately 500 gigatons of CO2 (GtCO2), depleting at an annual emission rate of roughly 40 GtCO2 per year.

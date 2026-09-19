@@ -1,0 +1,28 @@
+# Fundamentals and Architecture of Quantum Computing
+
+## 1. Principles of Quantum Mechanics in Computing
+Classical digital computers process information using bits that take a deterministic discrete state of either 0 or 1. In contrast, quantum computers utilize quantum bits, or qubits, which exploit the fundamental quantum phenomena of superposition and entanglement.
+
+Superposition allows a single qubit state |psi> to exist as a linear combination of basis states |0> and |1>:
+|psi> = alpha |0> + beta |1>
+where alpha and beta are complex probability amplitudes satisfying the normalization constraint |alpha|^2 + |beta|^2 = 1. When measured in the computational basis, the superposition collapses into state |0> with probability |alpha|^2 and state |1> with probability |beta|^2.
+
+Quantum entanglement is a non-local correlation between two or more qubits where the state of one qubit cannot be described independently of the state of the others, regardless of spatial separation. The canonical maximally entangled two-qubit Bell state is:
+|Phi+> = (1 / sqrt(2)) * (|00> + |11>)
+
+## 2. Quantum Algorithms and Speedups
+Quantum algorithms achieve algorithmic speedup over classical computing for specific computational complexity classes:
+- Shor's Algorithm: Discovered by Peter Shor in 1994, it solves the integer prime factorization problem in polynomial time O((log N)^2 * (log log N) * (log log log N)), compared to the best-known classical General Number Field Sieve (GNFS) which runs in sub-exponential time. Shor's algorithm renders standard RSA public-key cryptosystems vulnerable to polynomial-time attacks.
+- Grover's Algorithm: Formulated by Lov Grover in 1996, it performs unstructured database search over N items in O(sqrt(N)) query evaluations, providing a quadratic speedup over classical linear search O(N).
+- Quantum Phase Estimation (QPE): Serves as a foundational subroutine for finding eigenvalues of unitary operators, crucial for quantum chemistry simulations.
+
+## 3. Physical Qubit Implementations
+Multiple physical hardware architectures are in active development:
+1. Superconducting Qubits: Employ transmon qubits constructed from Josephson junctions operating at dilution refrigerator temperatures (below 15 millikelvin). Used by IBM, Google (Sycamore processor), and Rigetti. Advantages: rapid gate speeds (~10 to 100 nanoseconds) and lithographic scalability. Disadvantages: short coherence times (T1 and T2 relaxation under 100 microseconds).
+2. Trapped Ion Qubits: Suspend ionized atoms (such as Ytterbium-171 or Barium-133) in electromagnetic radiofrequency Paul traps, manipulated using focused laser beams. Used by IonQ and Quantinuum. Advantages: identical natural qubits with ultra-long coherence times (seconds to hours) and high gate fidelities exceeding 99.9%. Disadvantages: slower gate operation speeds (~10 to 100 microseconds).
+3. Neutral Atoms: Utilize optical tweezers formed by laser arrays to trap neutral Rubidium or Cesium atoms in 2D or 3D geometries. Led by QuEra.
+4. Photonic Qubits: Encode information in quantum states of single photons. Photonic systems operate at room temperature but face challenges with probabilistic two-qubit gate operations.
+
+## 4. Quantum Decoherence and Quantum Error Correction (QEC)
+The primary obstacle preventing large-scale quantum computation is environmental decoherence and gate noise. Thermal fluctuations, stray magnetic fields, and cosmic rays cause phase errors (phase-flip Z) and bit-flip errors (bit-flip X).
+Fault-tolerant quantum computing relies on Quantum Error Correction (QEC), notably the Surface Code. Surface codes map a single logical qubit across a two-dimensional lattice of physical data qubits and ancilla qubits (syndrome measurement qubits). To achieve fault tolerance, the physical physical error rate must fall below the fault-tolerance threshold (approximately 1% for surface codes). Typical estimates suggest that protecting one fault-tolerant logical qubit requires roughly 1,000 to 10,000 physical qubits depending on physical gate infidelity.

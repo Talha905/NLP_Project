@@ -1,0 +1,37 @@
+# Advances in Natural Language Processing, Transformers, and Retrieval-Augmented Generation
+
+## 1. The Transformer Architecture and Self-Attention
+The Transformer architecture, introduced by Vaswani et al. in 2017 in the seminal paper 'Attention Is All You Need', eliminated recurrent connections in favor of multi-head self-attention mechanisms. Self-attention enables tokens to dynamically weigh representations of all other tokens in a sequence simultaneously. The scaled dot-product attention formula is mathematically defined as:
+Attention(Q, K, V) = softmax((Q * K^T) / sqrt(d_k)) * V
+where Q represents queries, K represents keys, V represents values, and d_k is the dimensionality of the key vectors. The scaling factor 1/sqrt(d_k) prevents the dot products from growing excessively large for high dimensions, which would otherwise push the softmax function into regions with dangerously small gradients.
+
+Multi-head attention projects queries, keys, and values h times with distinct learned linear projections into dimensions d_k, d_k, and d_v respectively. Each attention head computes attention independently in parallel, allowing the model to jointly attend to information from different representation subspaces at different positions. Positional encodings (sinusoidal or learned Rotary Position Embeddings / RoPE) are injected into the input embeddings to provide token order information since the attention operator itself is permutation-invariant.
+
+## 2. Evolution of Pretrained Language Models
+Bidirectional Encoder Representations from Transformers (BERT), introduced by Devlin et al. in 2018, pioneered masked language modeling (MLM) and next sentence prediction (NSP). BERT is an encoder-only architecture optimized for sequence classification, named entity recognition, and extractive question answering. In contrast, the GPT family (Generative Pre-trained Transformer) by OpenAI utilizes decoder-only architectures trained autoregressively using causal language modeling (predicting the next token given preceding tokens). T5 (Text-to-Text Transfer Transformer) by Raffel et al. adopted an encoder-decoder framework unifying all NLP tasks into text-in, text-out formats.
+
+Modern Large Language Models (LLMs), such as LLaMA (Touvron et al.), Mistral, and Qwen, scale decoder-only architectures to billions of parameters. They incorporate structural refinements including RMSNorm (Root Mean Square Normalization) for training stability, SwiGLU activation functions in feed-forward layers, and Grouped-Query Attention (GQA) to minimize Key-Value (KV) cache memory footprint during autoregressive decoding.
+
+## 3. Retrieval-Augmented Generation (RAG) Fundamentals
+While LLMs exhibit remarkable parametric memory stored in their weights, they suffer from three fundamental limitations:
+1. Hallucination: Generating factually incorrect or fabricated claims with high linguistic confidence.
+2. Temporal Cutoff: Inability to access facts beyond their pretraining data cutoff date without expensive retraining.
+3. Lack of Provenance: Inability to cite reliable external references for auditability and domain verification.
+
+Retrieval-Augmented Generation (RAG), proposed by Lewis et al. in 2020, addresses these vulnerabilities by coupling a neural retriever with a generative reader. In a standard RAG pipeline:
+1. An input query q is converted into a dense vector embedding using an embedding model (e.g., all-MiniLM-L6-v2 or BGE-large).
+2. The vector index retrieves the Top-K most semantically similar text chunks C = {c_1, c_2, ..., c_K} from a pre-indexed corpus.
+3. The retrieved chunks are formatted alongside query q into an augmented prompt and passed to the generative LLM to produce an evidence-grounded answer a.
+
+## 4. Sparse, Dense, and Hybrid Retrieval
+Retrieval mechanisms can be divided into three categories:
+- Sparse Lexical Retrieval: Algorithms such as BM25 (Best Matching 25) evaluate term frequencies (TF), document frequencies (DF), and document length normalization. BM25 excels at exact keyword matching, rare acronyms, product IDs, and domain-specific terminology.
+- Dense Semantic Retrieval: Bi-encoder Transformer networks map queries and document chunks into shared low-dimensional continuous vector spaces (typically 384, 768, or 1536 dimensions). Similarity is computed via cosine similarity or inner product. Dense retrieval captures semantic synonyms, paraphrases, and conceptual meaning, but struggles with out-of-vocabulary terms and lexical precision.
+- Hybrid Retrieval and Fusion: Combines sparse BM25 and dense bi-encoder scores. Reciprocal Rank Fusion (RRF) is the gold standard for rank aggregation:
+RRF_score(d) = sum_{m in models} 1 / (k_rrf + rank_m(d))
+where k_rrf is a constant (typically 60). Hybrid retrieval achieves higher Recall@K across diverse query distributions.
+
+## 5. Failure Surfaces in RAG Pipelines
+RAG systems frequently fail in enterprise and production deployments. Factual inaccuracy arises from two distinct stages:
+1. Retrieval Failure: The required ground-truth evidence chunk is not present in the top-K retrieved context. Causes include semantic mismatch, poor chunking boundaries, low embedding fidelity, or index dilution from irrelevant corpus noise.
+2. Generation Failure: The correct evidence chunk is retrieved and provided in the LLM context window, but the generator still generates an incorrect answer. Causes include context distraction, attention drift across long contexts (the 'Lost in the Middle' phenomenon identified by Liu et al.), failure to synthesize multi-hop evidence, or pretraining parametric bias overriding the provided context.

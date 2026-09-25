@@ -15,8 +15,32 @@ if str(ROOT_DIR) not in sys.path:
 
 import json
 import time
+import contextlib
 import pandas as pd
 import streamlit as st
+
+@contextlib.contextmanager
+def st_popover_compat(label: str):
+    """Provides st.popover if available (Streamlit >=1.33), else falls back to st.expander."""
+    if hasattr(st, "popover"):
+        with st.popover(label):
+            yield
+    else:
+        with st.expander(label, expanded=False):
+            yield
+
+
+def st_segmented_compat(label: str, options: list, default: str):
+    """Provides st.segmented_control if available (Streamlit >=1.40), else falls back to horizontal st.radio."""
+    if hasattr(st, "segmented_control"):
+        val = st.segmented_control(label, options=options, default=default)
+        return val or default
+    return st.radio(
+        label,
+        options=options,
+        index=options.index(default) if default in options else 0,
+        horizontal=True
+    )
 
 from src.config import SAMPLE_DOCS_DIR, BENCHMARKS_DIR
 from src.core.rag_engine import RAGApp, LiveDiagnostic
@@ -110,7 +134,7 @@ st.sidebar.markdown("## 🧭 Workspace Navigation")
 selected_mode = st.sidebar.radio(
     "Choose Environment:",
     ["💬 Core RAG Assistant", "🔬 Failure Analysis Studio"],
-    index=0 if st.session_state["active_mode"] == "Core RAG Assistant" else 1,
+    index=0 if st.session_state.get("active_mode", "Core RAG Assistant") == "Core RAG Assistant" else 1,
     help="Switch between the clean daily RAG chatbot and the research testing lab."
 )
 st.session_state["active_mode"] = selected_mode
@@ -150,7 +174,7 @@ if selected_mode == "💬 Core RAG Assistant":
     c_upload, c_preset, c_adv = st.columns([2, 2, 1])
 
     with c_upload:
-        with st.popover("📁 Upload Custom Document (PDF / TXT)"):
+        with st_popover_compat("📁 Upload Custom Document (PDF / TXT)"):
             uploaded = st.file_uploader("Select a PDF, TXT, or Markdown document:", type=["pdf", "txt", "md"])
             if uploaded and st.button("Index Uploaded Document"):
                 with st.spinner("Processing & indexing..."):
@@ -164,7 +188,7 @@ if selected_mode == "💬 Core RAG Assistant":
                         st.rerun()
 
     with c_preset:
-        preset_choice = st.segmented_control(
+        preset_choice = st_segmented_compat(
             "RAG Profile:",
             options=["⚡ Fast", "⚖️ Balanced", "🎯 Deep Research"],
             default="⚖️ Balanced"
@@ -183,7 +207,7 @@ if selected_mode == "💬 Core RAG Assistant":
             rag_style = "grounded"
 
     with c_adv:
-        with st.popover("⚙️ Advanced"):
+        with st_popover_compat("⚙️ Advanced Settings"):
             rag_top_k = st.slider("Context Top-K", 1, 8, value=rag_top_k)
             rag_strategy = st.selectbox("Search Strategy", ["hybrid", "dense", "sparse"], index=["hybrid", "dense", "sparse"].index(rag_strategy))
             rag_style = st.selectbox("Prompt Strategy", ["grounded", "cot"], index=0 if rag_style == "grounded" else 1)

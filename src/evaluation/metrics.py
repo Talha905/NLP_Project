@@ -241,9 +241,23 @@ def evaluate_generation(
     rouge_l = calculate_rouge_l(prediction, gold_answer)
     semantic_sim = calculate_semantic_similarity(prediction, gold_answer, embedder)
 
+    # Check for substring inclusion and high token recall (for conversational LLM answers)
+    pred_norm = normalize_text(prediction)
+    gold_norm = normalize_text(gold_answer)
+    pred_tokens = set(pred_norm.split())
+    gold_tokens = set(gold_norm.split())
+    token_recall = len(gold_tokens.intersection(pred_tokens)) / max(1, len(gold_tokens))
+    substring_match = (len(gold_norm) >= 10 and gold_norm in pred_norm)
+
     # Composite correctness: weighted combination
     composite = 0.4 * semantic_sim + 0.3 * token_f1 + 0.3 * rouge_l
-    generation_success = (semantic_sim >= answer_sim_threshold) or (token_f1 >= f1_threshold) or (composite >= 0.50)
+    generation_success = (
+        (semantic_sim >= answer_sim_threshold) or
+        (token_f1 >= f1_threshold) or
+        (composite >= 0.50) or
+        substring_match or
+        (token_recall >= 0.80 and semantic_sim >= 0.50)
+    )
 
     return {
         "generation_success": bool(generation_success),

@@ -3,7 +3,7 @@ Hybrid retriever combining Dense semantic search and BM25 lexical search
 using Reciprocal Rank Fusion (RRF) or linear score combination.
 """
 
-from typing import List, Tuple, Dict, Literal
+from typing import List, Tuple, Dict, Literal, Optional
 import numpy as np
 from .vector_store import VectorStore
 from .bm25_retriever import BM25Retriever
@@ -36,29 +36,34 @@ class HybridRetriever:
         query: str,
         top_k: int = 3,
         strategy: Literal["hybrid", "dense", "sparse"] = "hybrid",
-        fusion_method: Literal["rrf", "linear"] = "rrf"
+        fusion_method: Literal["rrf", "linear"] = "rrf",
+        doc_id: Optional[str] = None
     ) -> List[Tuple[TextChunk, float]]:
         """
-        Retrieves top_k chunks using specified strategy.
+        Retrieves top_k chunks using specified strategy, optionally scoped to doc_id.
         Returns list of (TextChunk, fused_score).
         """
         if strategy == "dense":
             q_vec = self.embedder.embed_query(query)
-            return self.vector_store.search(q_vec, top_k=top_k)
+            return self.vector_store.search(q_vec, top_k=top_k, doc_id=doc_id)
 
         if strategy == "sparse":
-            return self.bm25_retriever.search(query, top_k=top_k)
+            return self.bm25_retriever.search(query, top_k=top_k, doc_id=doc_id)
 
         # Hybrid strategy: retrieve candidate pool from both
-        candidate_k = max(top_k * 3, 15)
+        candidate_k = max(top_k * 4, 20)
         q_vec = self.embedder.embed_query(query)
-        dense_results = self.vector_store.search(q_vec, top_k=candidate_k)
-        sparse_results = self.bm25_retriever.search(query, top_k=candidate_k)
+        dense_results = self.vector_store.search(q_vec, top_k=candidate_k, doc_id=doc_id)
+        sparse_results = self.bm25_retriever.search(query, top_k=candidate_k, doc_id=doc_id)
 
         if fusion_method == "rrf":
-            return self._fuse_rrf(dense_results, sparse_results, top_k=top_k)
+            fused = self._fuse_rrf(dense_results, sparse_results, top_k=top_k)
         else:
-            return self._fuse_linear(dense_results, sparse_results, top_k=top_k)
+            fused = self._fuse_linear(dense_results, sparse_results, top_k=top_k)
+
+        if doc_id:
+            print(f"[HYBRID_RETRIEVER] [FOCUSED_MODE] Scoped to '{doc_id}' — retrieved {len(fused)} chunks exclusively from target document.")
+        return fused
 
     def _fuse_rrf(
         self,

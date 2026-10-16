@@ -3,6 +3,15 @@ Embedding module supporting SentenceTransformers with PyTorch mean-pooling fallb
 Optimized for local CPU execution with zero API cost.
 """
 
+import sys
+import os
+
+# Prevent broken onnx/ml_dtypes import chain in torchvision if present
+if "torchvision" not in sys.modules:
+    sys.modules["torchvision"] = None
+if "onnx" not in sys.modules:
+    sys.modules["onnx"] = None
+
 from typing import List
 import numpy as np
 import torch
@@ -12,7 +21,7 @@ from ..config import DEFAULT_EMBEDDING_MODEL, EMBEDDING_DIM
 class DenseEmbedder:
     """
     Computes dense vector representations for queries and document chunks.
-    Tries SentenceTransformers first; falls back to raw PyTorch + Transformers mean pooling;
+    Tries SentenceTransformers first with local_files_only; falls back to raw PyTorch + Transformers;
     and has a deterministic n-gram vectorizer fallback for completely offline environments.
     """
 
@@ -23,33 +32,43 @@ class DenseEmbedder:
         self._load_model()
 
     def _load_model(self):
-        # 1. Try sentence-transformers
+        # 1. Try sentence-transformers with local_files_only
         try:
             from sentence_transformers import SentenceTransformer
-            self.model = SentenceTransformer(self.model_name, device="cpu")
+            try:
+                self.model = SentenceTransformer(
+                    self.model_name,
+                    device="cpu",
+                    model_kwargs={"local_files_only": True}
+                )
+            except Exception:
+                self.model = SentenceTransformer(self.model_name, device="cpu")
             self.backend = "sentence-transformers"
             self.dimension = self.model.get_sentence_embedding_dimension()
+            print(f"[EMBEDDER] [OFFLINE_INIT] Successfully loaded SentenceTransformer '{self.model_name}' (local_files_only=True, HF_HUB_OFFLINE={os.environ.get('HF_HUB_OFFLINE')})")
             return
         except Exception as e:
-            # print(f"SentenceTransformer not loaded ({e}), falling back to transformers...")
+            print(f"[EMBEDDER] [OFFLINE_INIT] SentenceTransformer offline load failed ({e}), trying transformers...")
             pass
 
-        # 2. Try raw transformers + PyTorch
+        # 2. Try raw transformers + PyTorch with local_files_only
         try:
             from transformers import AutoTokenizer, AutoModel
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            self.raw_model = AutoModel.from_pretrained(self.model_name)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, local_files_only=True)
+            self.raw_model = AutoModel.from_pretrained(self.model_name, local_files_only=True)
             self.raw_model.eval()
             self.backend = "transformers-pytorch"
             self.dimension = self.raw_model.config.hidden_size
+            print(f"[EMBEDDER] [OFFLINE_INIT] Successfully loaded raw Transformers '{self.model_name}' (local_files_only=True)")
             return
         except Exception as e:
-            # print(f"Transformers model not loaded ({e}), using deterministic hashing fallback...")
+            print(f"[EMBEDDER] [OFFLINE_INIT] Transformers local load failed ({e}), using deterministic fallback...")
             pass
 
         # 3. Deterministic n-gram projection fallback (offline fallback)
         self.backend = "deterministic-projection"
         self.dimension = EMBEDDING_DIM
+        print(f"[EMBEDDER] [OFFLINE_INIT] Using deterministic projection fallback (dimension={self.dimension})")
 
     def embed_texts(self, texts: List[str]) -> np.ndarray:
         """Embeds a list of text strings into a 2D float32 numpy array [N, D]."""

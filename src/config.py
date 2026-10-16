@@ -4,6 +4,15 @@ Configured for free, local execution without paid APIs or dedicated GPU requirem
 """
 
 import os
+
+# Strict Offline Enforcement: Prevent any online network calls/pings to Hugging Face
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+os.environ["HF_DATASETS_OFFLINE"] = "1"
+os.environ["USE_TF"] = "0"
+os.environ["USE_TORCH"] = "1"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+
 from pathlib import Path
 
 # Base Paths
@@ -19,24 +28,28 @@ BENCHMARKS_DIR.mkdir(parents=True, exist_ok=True)
 INDEX_DIR.mkdir(parents=True, exist_ok=True)
 
 # Retrieval Defaults
-DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_DIM = 384
 DEFAULT_CHUNK_SIZE = 400
 DEFAULT_CHUNK_OVERLAP = 50
 DEFAULT_TOP_K = 3
 DEFAULT_RRF_K = 60
 DEFAULT_HYBRID_ALPHA = 0.5  # Weight for dense (1-alpha for BM25)
+DEFAULT_RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+ENABLE_RERANKER = True
+DEFAULT_NLI_MODEL = "cross-encoder/nli-deberta-v3-small"
 
 # Ollama LLM Configuration
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 DEFAULT_OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 ALTERNATIVE_OLLAMA_MODEL = "llama3.2:latest"
 
-# Evaluation Thresholds
-RETRIEVAL_SIMILARITY_THRESHOLD = 0.55  # Cosine similarity threshold for gold evidence presence
-ANSWER_SIMILARITY_THRESHOLD = 0.58     # Semantic similarity threshold for answer correctness
-TOKEN_F1_THRESHOLD = 0.35              # Token F1 threshold
-FAITHFULNESS_THRESHOLD = 0.60          # Grounding / Entailment threshold
+# Empirically Calibrated Evaluation Thresholds
+# Grounded via 50-sample validation sweep (see THRESHOLD_DERIVATION.md and scripts/derive_thresholds.py)
+RETRIEVAL_SIMILARITY_THRESHOLD = 0.72  # tau_R: Cosine similarity threshold for gold evidence presence
+ANSWER_SIMILARITY_THRESHOLD = 0.78     # tau_S: Semantic cosine similarity threshold for answer correctness
+TOKEN_F1_THRESHOLD = 0.50              # tau_A: Token-level F1 threshold for lexical alignment
+FAITHFULNESS_THRESHOLD = 0.60          # tau_F: Sentence NLI entailment threshold
 
 # Failure Taxonomy Categories
 FAILURE_CATEGORIES = {

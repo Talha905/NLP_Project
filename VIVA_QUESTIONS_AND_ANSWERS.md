@@ -221,10 +221,12 @@ Decoupling into two modes in the sidebar provides **separation of concerns**:
 ### Q25: How does the "Zero-Ground-Truth Live Diagnostic" work in the chat interface?
 **Answer:**
 In live production, gold answers $a^*$ are unavailable. The engine evaluates:
-1. **Query-Context Similarity**: Computes cosine similarity between query $q$ and top chunk $c_1$. If $< 0.45$, flags 🟡 *Weak Retrieval*.
-2. **Context-Answer Faithfulness**: Computes token overlap and directional semantic alignment between generated answer $\hat{a}$ and $\mathcal{C}_K$. If $< 0.50$, flags 🔴 *Potential Hallucination*.
-3. **Refusal Detection**: Uses regex patterns to identify valid refusals (e.g., *"not mentioned in the text"*).
-4. If all checks pass, flags 🟢 *Healthy & Faithful*.
+1. **Query-Context Semantic Relevance**: Computes cosine similarity between query $q$ and top chunk $c_1$. If $< 0.38$, flags 🟡 *Low Relevance Context / Distractor Information*.
+2. **Sentence-Level Cross-Encoder NLI Faithfulness**: Decomposes generated answer $\hat{a}$ into factual claims and runs deep Natural Language Inference (`cross-encoder/nli-deberta-v3-small`) against retrieved parent-chunk contexts:
+   * **Contradiction Check**: If any claim directly contradicts context facts ($p_{\text{contra}} \ge 0.50$), flags 🔴 *Direct Context Contradiction*.
+   * **Entailment Check**: If claims lack context support ($p_{\text{entail}} < 0.60$), flags 🔴 *Potential Hallucination Detected*.
+3. **Refusal Verification**: Uses regex detection to identify appropriate refusals (e.g., *"insufficient evidence"*), verifying whether evidence was truly missing or if the model exhibited over-conservative refusal.
+4. If all claims are entailed, flags 🟢 *Grounded & Supported (Healthy)*.
 
 ### Q26: Explain the role of the Plotly Sankey Diagram in error visualization.
 **Answer:**
@@ -249,16 +251,47 @@ The FastAPI backend (`src/api/app.py`) provides asynchronous REST endpoints:
 * `POST /index`: Ingests documents programmatically.
 * `POST /evaluate`: Executes automated regression benchmark evaluations in external CI/CD pipelines.
 
-### Q29: What are the main limitations of this system, and how would you extend it in future work?
+### Q29: What are the main architectural enhancements recently integrated into this framework?
 **Answer:**
-* **Current Limitations**:
-  1. Relies on CPU bi-encoders; handling multi-million document corpora would require approximate nearest neighbor search (e.g., FAISS HNSW or IVF) instead of exact `IndexFlatIP`.
-  2. Tabular and structured financial tables can suffer from chunk slicing.
-* **Future Extensions**:
-  1. Add a neural cross-encoder reranker (e.g., `bge-reranker-large`).
-  2. Implement HyDE (Hypothetical Document Embeddings) to improve retrieval on ambiguous queries.
-  3. Integrate GraphRAG to capture knowledge graph entity relationships across distant documents.
+1. **Two-Stage Retrieval with Cross-Encoder Reranking**: We deployed `cross-encoder/ms-marco-MiniLM-L-6-v2` as a second-stage filter after Hybrid RRF to re-score candidates via full cross-attention.
+2. **Hierarchical Parent-Child Chunking**: We index small child chunks (~250c) for search precision while expanding to full parent sections (~1200c) in LLM generation.
+3. **Sentence-Level Cross-Encoder NLI**: Upgraded live diagnostics from naive token matching to `cross-encoder/nli-deberta-v3-small` with explicit contradiction detection.
+4. **Document-Scoped Retrieval Filtering**: Added `doc_id` scoping to isolate search to specific documents, preventing BM25 cross-document dilution.
+5. **Executive Summary Meta-Routing**: Automatically generates structured document overviews during ingestion to answer synthesis queries.
 
-### Q30: If you had only 60 seconds to summarize your project to an examiner, what would you say?
+### Q30: What is Parent-Child Hierarchical Chunking and why does it outperform naive fixed chunking?
 **Answer:**
-*"Our project addresses the core diagnostic ambiguity in Retrieval-Augmented Generation: when a RAG system answers incorrectly, is the search engine failing, or is the language model failing? We built a 100% open-source, local framework that mathematically decomposes total system error into Retrieval Attribution ($\alpha_R$) and Generation Attribution ($\alpha_G$). We classify errors into an 8-part diagnostic taxonomy with actionable engineering mitigations, and introduce a controlled ablation engine that isolates model capability by holding retrieval context constant across models like Qwen and Llama. Finally, we decoupled the system into a daily streaming assistant with real-time zero-ground-truth diagnostics and a deep research laboratory for automated benchmarking."*
+Naive chunking forces an engineering compromise: small chunks (e.g. 200c) improve vector search resolution but truncate sentences and strip away context needed by the LLM. Large chunks (e.g. 1500c) preserve context but dilute vector embeddings with unrelated sentences, degrading retrieval precision.
+**Parent-Child Hierarchical Chunking** solves this:
+* **Child Chunks (~250 characters)**: Extracted and indexed into FAISS and BM25. Their tight semantic focus maximizes recall and precision during search.
+* **Parent Sections (~1200 characters)**: Enclose several contiguous child chunks. When a child chunk is retrieved, the engine resolves its `parent_id` and provides the full, coherent parent section to the LLM prompt, deduplicating overlapping parents.
+
+### Q31: Why is a Two-Stage Retrieval pipeline (Bi-Encoder/BM25 + Cross-Encoder Reranker) necessary?
+**Answer:**
+* **First Stage (Bi-Encoder & BM25)**: Employs independent encoding where query and document vectors are computed separately. This allows pre-computing vector indices for fast nearest-neighbor search ($\mathcal{O}(d \cdot M)$), but misses fine-grained token-level cross-interactions.
+* **Second Stage (Cross-Encoder)**: Feeds query and candidate text concatenated together into BERT/MiniLM cross-attention layers. This computes full cross-attention between every query word and every document word, catching semantic subtleties and false positives that fooled the bi-encoder.
+Because cross-encoders are computationally expensive, we run them only on the top candidate pool ($K_{\text{cand}} = \max(2K, 6)$) from Stage 1.
+
+### Q32: How does Sentence-Level NLI Faithfulness scoring detect subtle hallucinations and direct contradictions?
+**Answer:**
+Rather than computing bag-of-words token overlap or cosine similarity across the entire answer, the system decomposes the generated answer into individual sentence claims. Each sentence is treated as a hypothesis, and the retrieved context chunks serve as premises for an NLI model (`cross-encoder/nli-deberta-v3-small`):
+* If $p_{\text{entailment}} \ge 0.60$, the claim is factually grounded.
+* If $p_{\text{contradiction}} \ge 0.50$, the claim explicitly contradicts stated facts (e.g., claiming "Transformers use sequential recurrence" when the context states "Transformers eliminate recurrence").
+* If neither condition holds, the claim is flagged as an unsupported hallucination.
+
+### Q33: What is the cause of multi-document BM25 dilution, and how does Document-Scoped filtering resolve it?
+**Answer:**
+BM25 scores documents based on term frequency and inverse document frequency. In a multi-document corpus, if a user uploads a document and asks a query whose keywords only appear in one chunk of that document, BM25 scores all other chunks of that document as $0.0$.
+During Reciprocal Rank Fusion (RRF), chunks from other unrelated documents in the corpus that happen to contain generic keywords fill the remaining top-$K$ slots, diluting the context with irrelevant noise.
+**Document-Scoped Filtering (`doc_id`)** resolves this by enforcing a hard SQL/index predicate on the target document, ensuring that only chunks belonging to the selected document compete for top-$K$ ranks.
+
+### Q34: How were the decision thresholds $\tau_R=0.72, \tau_A=0.50, \tau_S=0.78$ derived empirically?
+**Answer:**
+Rather than setting arbitrary heuristics, we executed an empirical parameter sweep against the 50-query validation benchmark (`data/benchmarks/rag_failure_benchmark_50.json`):
+1. **$\tau_R = 0.72$**: Swept cosine similarity thresholds between retrieved candidate chunks and true gold evidence vs distractor chunks. $\tau_R = 0.72$ yielded the optimal $F_1$ peak ($0.989$) with $100\%$ precision, rejecting distractor noise.
+2. **$\tau_A = 0.50$**: Swept token-level F1 overlap between reference answers and model paraphrases vs incorrect answers. $\tau_A = 0.50$ provided $1.000$ precision and $1.000$ recall, avoiding false positives from superficial stopword matches.
+3. **$\tau_S = 0.78$**: Swept dense semantic cosine similarity between reference answers and generated paraphrases. $\tau_S = 0.78$ achieved optimal semantic separation ($F_1 = 0.840$), correctly discriminating between conceptually accurate paraphrases and subtly flawed statements.
+
+### Q35: If you had only 60 seconds to summarize your project to an examiner, what would you say?
+**Answer:**
+*"Our project addresses the core diagnostic ambiguity in Retrieval-Augmented Generation: when a RAG system answers incorrectly, is the search engine failing, or is the language model failing? We built a 100% open-source, local framework that mathematically decomposes total system error into Retrieval Attribution ($\alpha_R$) and Generation Attribution ($\alpha_G$). We deploy a production-grade Two-Stage Retrieval pipeline with Hybrid RRF and Cross-Encoder reranking, Hierarchical Parent-Child chunking, and Sentence-Level NLI Faithfulness scoring. We empirically calibrated our decision thresholds against benchmark sweeps and decoupled the application into a daily streaming assistant with live self-diagnostics and a deep research laboratory for controlled cross-model ablations."*

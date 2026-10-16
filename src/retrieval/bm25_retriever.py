@@ -5,7 +5,7 @@ BM25 Lexical Retriever supporting rank_bm25 and a built-in Python BM25 Okapi imp
 import math
 import re
 from collections import Counter
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 from ..ingestion.chunker import TextChunk
 
 
@@ -60,39 +60,57 @@ class BM25Retriever:
             for term in tf.keys():
                 self.doc_freqs[term] = self.doc_freqs.get(term, 0) + 1
 
-    def search(self, query: str, top_k: int = 3) -> List[Tuple[TextChunk, float]]:
-        """Searches for top_k chunks by BM25 score."""
+    def search(self, query: str, top_k: int = 3, doc_id: Optional[str] = None) -> List[Tuple[TextChunk, float]]:
+        """Searches for top_k chunks by BM25 score, optionally scoped to a single document."""
         if not self.chunks:
             return []
 
+        # Determine target candidate indices
+        valid_indices = list(range(len(self.chunks)))
+        if doc_id:
+            from pathlib import Path
+            valid_indices = [
+                i for i, c in enumerate(self.chunks)
+                if c.doc_id == doc_id or c.source_filename == doc_id or Path(c.source_filename).name == Path(doc_id).name
+            ]
+            if not valid_indices:
+                print(f"[BM25] [FILTER] No chunks match doc_id='{doc_id}'")
+                return []
+            top_k = min(top_k, len(valid_indices))
+        else:
+            top_k = min(top_k, len(self.chunks))
+
         query_tokens = self.tokenize(query)
         if not query_tokens:
-            return [(c, 0.0) for c in self.chunks[:top_k]]
-
-        top_k = min(top_k, len(self.chunks))
+            return [(self.chunks[i], 0.0) for i in valid_indices[:top_k]]
 
         # rank_bm25 path
         if self.use_rank_bm25 and self.bm25_engine is not None:
-            scores = self.bm25_engine.get_scores(query_tokens)
-            sorted_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
-            return [(self.chunks[i], float(scores[i])) for i in sorted_indices]
+            all_scores = self.bm25_engine.get_scores(query_tokens)
+            sorted_indices = sorted(valid_indices, key=lambda i: all_scores[i], reverse=True)[:top_k]
+            res = [(self.chunks[i], float(all_scores[i])) for i in sorted_indices]
+            if doc_id:
+                print(f"[BM25] [FILTER] Scoped to '{doc_id}': retrieved {len(res)} chunks")
+            return res
 
         # Pure Python BM25 calculation
-        scores = [0.0] * self.corpus_size
+        all_scores = [0.0] * self.corpus_size
         for term in query_tokens:
             if term not in self.doc_freqs:
                 continue
             df = self.doc_freqs[term]
-            # IDF calculation with smoothing
             idf = math.log(1.0 + (self.corpus_size - df + 0.5) / (df + 0.5))
 
-            for i in range(self.corpus_size):
+            for i in valid_indices:
                 tf = self.term_freqs[i].get(term, 0)
                 if tf > 0:
                     doc_len = self.doc_lens[i]
                     num = tf * (self.k1 + 1.0)
                     denom = tf + self.k1 * (1.0 - self.b + self.b * (doc_len / self.avg_doc_len))
-                    scores[i] += idf * (num / denom)
+                    all_scores[i] += idf * (num / denom)
 
-        sorted_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
-        return [(self.chunks[i], float(scores[i])) for i in sorted_indices]
+        sorted_indices = sorted(valid_indices, key=lambda i: all_scores[i], reverse=True)[:top_k]
+        res = [(self.chunks[i], float(all_scores[i])) for i in sorted_indices]
+        if doc_id:
+            print(f"[BM25] [FILTER] Scoped to '{doc_id}': retrieved {len(res)} chunks")
+        return res

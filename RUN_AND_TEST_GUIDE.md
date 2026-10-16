@@ -352,3 +352,31 @@ To integrate or test programmatically with curl or Python:
      -H "Content-Type: application/json" \
      -d '{"benchmark_name": "quick_10", "top_k": 3, "strategy": "hybrid"}'
    ```
+
+---
+
+## 6. Running Advanced Neural & Threshold Tests
+
+### 1. Test 2nd-Stage Cross-Encoder Reranker
+Verifies that the Cross-Encoder correctly reorders candidate chunks and assigns calibrated sigmoid relevance probabilities:
+```bash
+python -m unittest tests/test_reranker.py
+```
+
+### 2. Test Sentence-Level NLI Faithfulness & Contradictions
+Verifies that factual claims are decomposed into sentences and evaluated for entailment and direct context contradiction using DeBERTa-v3:
+```bash
+python -m unittest tests/test_nli_grounding.py
+```
+
+### 3. Run Empirical Threshold Calibration Sweep
+Runs the full empirical derivation of $\tau_R=0.72, \tau_A=0.50, \tau_S=0.78$ against the 50-query validation benchmark, outputting precision, recall, and F1 trade-off tables:
+```bash
+python scripts/derive_thresholds.py
+```
+
+### 4. Run the Full Test Suite
+Executes all 16 unit and integration tests across retrieval, reranking, NLI grounding, decomposition, and model ablation:
+```bash
+python run_app.py --test
+```

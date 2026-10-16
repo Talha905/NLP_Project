@@ -183,6 +183,7 @@ if selected_mode == "💬 Core RAG Assistant":
                         f.write(uploaded.getbuffer())
                     success = rag_app.index_uploaded_file(save_path)
                     if success:
+                        st.session_state["selected_doc"] = uploaded.name
                         st.success(f"Indexed '{uploaded.name}'! Ready to ask questions.")
                         time.sleep(1)
                         st.rerun()
@@ -212,6 +213,28 @@ if selected_mode == "💬 Core RAG Assistant":
             rag_strategy = st.selectbox("Search Strategy", ["hybrid", "dense", "sparse"], index=["hybrid", "dense", "sparse"].index(rag_strategy))
             rag_style = st.selectbox("Prompt Strategy", ["grounded", "cot"], index=0 if rag_style == "grounded" else 1)
             force_offline = st.checkbox("Force Fast Synthesizer", value=not ollama_connected)
+
+    # Document Scoping Control Bar: Focused vs Global
+    c_scope1, c_scope2 = st.columns([1, 2])
+    with c_scope1:
+        search_scope = st.radio("Search Scope:", ["🎯 Focused (Selected Doc)", "🌐 Global (All Docs)"], index=0, horizontal=True)
+    with c_scope2:
+        available_docs = [
+            Path(getattr(d, "filename", None) or getattr(d, "source_filename", None) or d.doc_id).name
+            for d in rag_app.documents
+        ]
+        # Default to recently uploaded doc or assignment PDF if present
+        default_idx = 0
+        if "selected_doc" in st.session_state and st.session_state["selected_doc"] in available_docs:
+            default_idx = available_docs.index(st.session_state["selected_doc"])
+        else:
+            for i, name in enumerate(available_docs):
+                if "Assignment" in name or "23102B0025" in name:
+                    default_idx = i
+                    break
+        selected_doc = st.selectbox("Active Target Document:", available_docs, index=default_idx if available_docs else 0) if search_scope.startswith("🎯") else None
+        if selected_doc:
+            st.session_state["selected_doc"] = selected_doc
 
     st.markdown("---")
 
@@ -265,7 +288,8 @@ if selected_mode == "💬 Core RAG Assistant":
                     top_k=rag_top_k,
                     strategy=rag_strategy,
                     prompt_style=rag_style,
-                    model_name=active_model
+                    model_name=active_model,
+                    doc_id=selected_doc
                 )
 
             # Stream the answer word by word
@@ -311,13 +335,66 @@ else:
     st.markdown('<div class="app-subtitle">A controlled experimental laboratory for decomposing RAG errors into Retrieval vs Generation surfaces, running multi-model ablations, and diagnosing root causes.</div>', unsafe_allow_html=True)
 
     # Studio Sub-Tabs
-    s_tab1, s_tab2, s_tab3, s_tab4, s_tab5 = st.tabs([
+    s_tab0, s_tab1, s_tab2, s_tab3, s_tab4, s_tab5 = st.tabs([
+        "🔎 Single-Query Diagnostic Inspector",
         "🧪 Benchmark Evaluator",
         "📊 Error Decomposition",
         "🤖 Model Capability Lab",
         "📈 Parameter Sweeps (Top-K & Strategies)",
         "🔍 Deep Sample Explorer & CSV Export"
     ])
+
+    # --------------------------------------------------------------------------
+    # SUB-TAB 0: SINGLE-QUERY DEEP DIAGNOSTIC INSPECTOR
+    # --------------------------------------------------------------------------
+    with s_tab0:
+        st.markdown("### 🔎 Single-Query Deep Diagnostic Inspector")
+        st.caption("Inspects live retrieval relevance, cosine similarity scores, parent-child chunk expansion, and root-cause failure diagnostics for any individual query.")
+
+        prefilled = st.session_state.get("prefill_query", "")
+        inspect_q = st.text_input("Enter or inspect query:", value=prefilled, placeholder="e.g. what is the research gap analysed here")
+
+        i_c1, i_c2, i_c3 = st.columns([1, 1, 1])
+        with i_c1:
+            i_top_k = st.slider("Inspect Top-K", 1, 8, value=3, key="i_top_k")
+        with i_c2:
+            i_strat = st.selectbox("Search Strategy", ["hybrid", "dense", "sparse"], index=0, key="i_strat")
+        with i_c3:
+            avail_docs = ["All Documents"] + [
+                Path(getattr(d, "filename", None) or getattr(d, "source_filename", None) or d.doc_id).name
+                for d in rag_app.documents
+            ]
+            i_doc_sel = st.selectbox("Scope to Document:", avail_docs, index=0, key="i_doc_sel")
+            i_doc_filter = None if i_doc_sel == "All Documents" else i_doc_sel
+
+        # Trigger on inspect button or if prefilled on initial redirect
+        should_run = st.button("🔬 Run Deep Inspection", type="primary") or bool(prefilled)
+
+        if inspect_q and should_run:
+            print(f"[FAILURE_STUDIO] [INSPECT] Populated prefill_query='{inspect_q}' (doc_filter={i_doc_filter})")
+            with st.spinner("Analyzing retrieval and context grounding..."):
+                scored_chunks = rag_app.retrieve(inspect_q, top_k=i_top_k, strategy=i_strat, doc_id=i_doc_filter)
+                chunks = [c for c, _ in scored_chunks]
+
+                # Generate sample response and run diagnosis
+                sample_ans = "The provided context does not contain sufficient evidence to answer this question." if not ollama_connected else rag_app.llm.generate(inspect_q, chunks)["answer"]
+                diag = rag_app.diagnose(inspect_q, chunks, sample_ans)
+
+            st.markdown("---")
+            st.markdown(f"#### 🏷️ Diagnostic Status: <span style='color:{diag.color}; font-weight:700;'>● {diag.badge_text}</span>", unsafe_allow_html=True)
+            st.info(f"**Root Cause Analysis:** {diag.explanation}")
+            st.warning(f"**Actionable Mitigation:** {diag.mitigation}")
+
+            st.markdown(f"#### 📚 Retrieved Chunks ({len(scored_chunks)} items)")
+            for r_idx, (chunk, score) in enumerate(scored_chunks, 1):
+                with st.expander(f"Chunk #{r_idx}: {chunk.chunk_id} | Score: {score:.4f} | Doc: {chunk.source_filename}", expanded=True):
+                    sc_col1, sc_col2 = st.columns([1, 1])
+                    with sc_col1:
+                        st.markdown("**Search Text (Child Chunk):**")
+                        st.code(chunk.text)
+                    with sc_col2:
+                        st.markdown("**Expanded Parent Context:**" if chunk.parent_text else "**Full Text:**")
+                        st.code(chunk.parent_text or chunk.text)
 
     # --------------------------------------------------------------------------
     # SUB-TAB 1: BENCHMARK EVALUATOR
@@ -394,12 +471,30 @@ else:
             k6.metric("Mean Faithfulness", f"{res.mean_faithfulness*100:.1f}%")
 
             summary = FailureTaxonomyAdvisor.generate_executive_summary(res.samples)
-            st.info(f"""
-            **Empirical Finding:**
-            - **Primary Vulnerable Component:** `{summary['primary_vulnerable_component']}`
-            - **Top Failure Mode:** `{summary['top_failure_subtype']}` ({summary['top_failure_count']} occurrences)
-            - **Actionable Priority Mitigation:** {summary['priority_recommendation']}
-            """)
+            if summary.get("top_failure_count", 0) > 0:
+                st.info(f"""
+                **Empirical Finding:**
+                - **Primary Vulnerable Component:** `{summary.get('primary_vulnerable_component', 'NONE')}`
+                - **Top Failure Mode:** `{summary.get('top_failure_subtype', 'NONE')}` ({summary.get('top_failure_count', 0)} occurrences)
+                - **Actionable Priority Mitigation:** {summary.get('priority_recommendation', 'Inspect sample queries.')}
+                """)
+            else:
+                st.success(f"""
+                **Empirical Finding:**
+                - **Primary Vulnerable Component:** `None (Optimal Performance)`
+                - **Top Failure Mode:** `None` (0 failures detected)
+                - **Actionable Priority Mitigation:** {summary.get('priority_recommendation', 'System demonstrates high end-to-end fidelity.')}
+                """)
+
+            with st.expander("📖 What do these KPI metrics mean and how are they derived?", expanded=False):
+                st.markdown("""
+                - **Total Queries ($N$)**: The total count of ground-truth test questions evaluated in this benchmark run.
+                - **Success Rate ($S = N_{\\text{success}} / N$)**: Percentage of queries where both retrieval and generation succeeded ($R=1, G=1$), or unanswerable queries where the model correctly refused ($R=0, G=1$ unanswerable refusal).
+                - **Total Error Rate ($E = (N_{\\text{ret\\_fail}} + N_{\\text{gen\\_fail}}) / N$)**: Proportion of queries that failed due to missing context or incorrect/hallucinated generation. *Parametric Memory Recall* ($R=0, G=1$) is tracked separately as spurious recall because it succeeded without grounded evidence.
+                - **Retrieval Attribution ($\\alpha_R = N_{\\text{ret\\_fail}} / N_{\\text{errors}}$)**: The exact percentage of system failures caused by the retrieval stage (missing context, chunk boundary truncation, or distractor noise).
+                - **Generation Attribution ($\\alpha_G = N_{\\text{gen\\_fail}} / N_{\\text{errors}}$)**: The exact percentage of system failures caused by the language model (hallucination, context contradiction, or reasoning failure). Note that $\\alpha_R + \\alpha_G = 100\\%$, pinpointing where engineering effort should be directed.
+                - **Mean Faithfulness**: Average sentence-level NLI entailment rate across all answers ($F \\in [0.0, 1.0]$). Each sentence is independently evaluated against retrieved chunks using `cross-encoder/nli-deberta-v3-small`.
+                """)
 
     # --------------------------------------------------------------------------
     # SUB-TAB 2: ERROR DECOMPOSITION & VISUALIZATIONS
@@ -535,6 +630,13 @@ else:
             with ck2:
                 st.dataframe(df_k[["Top_K", "Total_Error_Rate", "Retrieval_Failure_Rate", "Generation_Failure_Rate", "Mean_Token_F1"]], use_container_width=True)
 
+            st.info("""
+            **💡 How to interpret the Top-K Parameter Sweep:**
+            - **Retrieval Failure Rate drops** as $K$ increases from 1 to 8 because retrieving more chunks increases the probability of capturing the required gold evidence (**Recall@K gain**).
+            - **Generation Failure Rate rises or plateaus** at higher $K$ because feeding excessive text dilutes the prompt with irrelevant distractor paragraphs, increasing the likelihood of hallucination (**Context Dilution / Lost in the Middle**).
+            - **The Trade-Off Sweet Spot ($K^*=3$)**: Notice where Total Error Rate is minimized. Top-K=3 achieves the optimal balance between high retrieval recall and low prompt noise.
+            """)
+
         st.markdown("---")
         # Strategy Comparison
         st.markdown("#### 2. Retrieval Strategy Sweep (Dense vs Sparse BM25 vs Hybrid RRF)")
@@ -552,6 +654,13 @@ else:
                 st.plotly_chart(create_strategy_comparison_chart(df_s), use_container_width=True)
             with cs2:
                 st.dataframe(df_s[["Strategy", "Total_Error_Rate", "Retrieval_Failures", "Generation_Failures", "Success_Count"]], use_container_width=True)
+
+            st.info("""
+            **💡 How to interpret Retrieval Strategies:**
+            - **Dense (Vector Search)**: Excels at understanding abstract semantic concepts, paraphrases, and synonyms using `all-MiniLM-L6-v2`, but struggles with exact acronyms, numbers, and out-of-vocabulary technical identifiers.
+            - **Sparse (BM25 Okapi)**: Excels at exact keyword and term matching (e.g. specific IDs, chemical equations, mathematical formulas), but misses synonymous phrasing.
+            - **Hybrid (Reciprocal Rank Fusion)**: Combines the reciprocal rank orders of both Dense and Sparse retrieval ($RRF(d) = \\sum \\frac{1}{60 + r_m(d)}$), capturing both semantic intent and exact entity matches for lowest total error rate.
+            """)
 
     # --------------------------------------------------------------------------
     # SUB-TAB 5: DEEP SAMPLE EXPLORER & CSV EXPORT

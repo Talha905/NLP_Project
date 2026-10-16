@@ -57,21 +57,42 @@ class VectorStore:
         if self.use_faiss and self.faiss_index is not None:
             self.faiss_index.add(emb)
 
-    def search(self, query_vector: np.ndarray, top_k: int = 3) -> List[Tuple[TextChunk, float]]:
+    def search(self, query_vector: np.ndarray, top_k: int = 3, doc_id: Optional[str] = None) -> List[Tuple[TextChunk, float]]:
         """
-        Searches for top_k most similar chunks.
+        Searches for top_k most similar chunks, optionally scoped to a single document.
         Returns list of (TextChunk, similarity_score).
         """
         if len(self.chunks) == 0 or self.embeddings is None:
             return []
 
-        top_k = min(top_k, len(self.chunks))
+        # If doc_id filter is specified, isolate matching chunk indices
+        filtered_indices = None
+        if doc_id:
+            filtered_indices = [
+                i for i, c in enumerate(self.chunks)
+                if c.doc_id == doc_id or c.source_filename == doc_id or Path(c.source_filename).name == Path(doc_id).name
+            ]
+            if not filtered_indices:
+                print(f"[VECTOR_STORE] [FILTER] No chunks match doc_id='{doc_id}'")
+                return []
+            top_k = min(top_k, len(filtered_indices))
+        else:
+            top_k = min(top_k, len(self.chunks))
 
         # Normalize query vector
         q = np.array(query_vector, dtype=np.float32).reshape(1, -1)
         q_norm = np.linalg.norm(q)
         if q_norm > 1e-9:
             q = q / q_norm
+
+        # Filtered NumPy path (exact cosine search on target document chunks)
+        if filtered_indices is not None:
+            sub_embeddings = self.embeddings[filtered_indices]
+            scores = np.dot(sub_embeddings, q.T).flatten()
+            top_local_idx = np.argsort(-scores)[:top_k]
+            results = [(self.chunks[filtered_indices[i]], float(scores[i])) for i in top_local_idx]
+            print(f"[VECTOR_STORE] [FILTER] Scoped to '{doc_id}': retrieved {len(results)} chunks")
+            return results
 
         if self.use_faiss and self.faiss_index is not None:
             scores, indices = self.faiss_index.search(q, top_k)

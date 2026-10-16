@@ -8,16 +8,21 @@ The project isolates and mathematically quantifies the exact contribution of **R
 
 ## 🌟 Key Features
 
-* **Completely Free & GPU-Independent**: Runs locally on a standard laptop CPU without paid cloud APIs, subscriptions, or proprietary models.
+* **Completely Free, Offline & GPU-Independent**: Runs locally on a standard laptop CPU without paid cloud APIs, subscriptions, or network pings (`local_files_only=True`, `HF_HUB_OFFLINE=1`).
+* **Two-Stage Retrieval Pipeline**:
+  - **Stage 1 (Candidate Generation)**: Dual-engine dense semantic retrieval (`sentence-transformers/all-MiniLM-L6-v2`) and sparse lexical retrieval (BM25 Okapi) fused via Reciprocal Rank Fusion (RRF), supporting **Document-Scoped Filtering** (`doc_id`).
+  - **Stage 2 (Cross-Encoder Reranking)**: Deep query-document cross-attention using `cross-encoder/ms-marco-MiniLM-L-6-v2` to suppress distractor noise and optimize top-$K$ precision.
+* **Hierarchical Parent-Child Chunking**: Indexes small, focused child chunks (~250 chars) for semantic search accuracy, while dynamically expanding to enclosing parent sections (~1200 chars) in the LLM context.
+* **Executive Summary Ingestion & Meta-Query Routing**: Automatically pre-computes structured document overviews to answer broad meta-queries ("summarize", "overview", "what is this document about") without retrieval failure.
+* **Sentence-Level NLI Faithfulness Scorer**: Decomposes generated answers into claims and applies `cross-encoder/nli-deberta-v3-small` for factual entailment and explicit contradiction detection.
+* **Empirical Threshold Derivation**: Calibrated cutoffs ($\tau_R = 0.72$, $\tau_A = 0.50$, $\tau_S = 0.78$) validated via precision-recall sweeps (see [THRESHOLD_DERIVATION.md](THRESHOLD_DERIVATION.md)).
 * **Mathematical Error Decomposition**: Partitions total failure rate $E_{\text{total}}$ into mutually exclusive surfaces:
   $$E_{\text{total}} = P(R=0, G=0) + P(R=1, G=0)$$
   Quantifying Retrieval Attribution ($\alpha_R$) and Generation Attribution ($\alpha_G$).
-* **Dual-Engine Retrieval**: Hybrid Search combining Dense Bi-encoder semantic retrieval (`sentence-transformers` / PyTorch) and Sparse Lexical retrieval (BM25 Okapi) fused via Reciprocal Rank Fusion (RRF).
 * **Local LLM Integration**: Native support for locally running **Ollama** (`qwen2.5:3b`, `llama3.2`, etc.) with automated deterministic offline fallbacks for rapid headless benchmarking.
 * **Fine-Grained Failure Taxonomy**: Automated diagnostic classification with actionable engineering mitigations for each detected failure mode.
 * **Multi-Factor Sensitivity & Ablation Engine**: Systematic parameter sweeps across Top-$K \in [1..10]$, Chunk Size, Retrieval Strategy (Dense vs Sparse vs Hybrid), and Question Complexity.
-* **Interactive Streamlit Research Dashboard**: 6 modular research views with interactive Plotly Sankey diagrams, waterfall attribution charts, $2 \times 2$ outcome confusion matrices, live document query inspector, sample drill-down, and academic report export.
-* **Production-Ready FastAPI Backend**: REST API for seamless programmatic integration.
+* **Interactive Streamlit Research Dashboard**: Core RAG Assistant with live self-diagnostics + Failure Analysis Studio with Sankey diagrams, waterfall attribution charts, and prefilled diagnostic queries.
 
 ---
 

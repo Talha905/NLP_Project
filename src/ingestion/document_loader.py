@@ -12,6 +12,7 @@ class Document(BaseModel):
     """Represents an ingested document with source metadata."""
     doc_id: str
     filename: str
+    source_filename: str = ""
     source_path: str
     content: str
     char_count: int = 0
@@ -19,6 +20,8 @@ class Document(BaseModel):
     def model_post_init(self, __context):
         if not self.char_count:
             self.char_count = len(self.content)
+        if not self.source_filename:
+            self.source_filename = self.filename
 
 
 class DocumentLoader:
@@ -40,10 +43,16 @@ class DocumentLoader:
                     content = f.read()
             elif ext == ".pdf":
                 import pypdf
+                import re
                 reader = pypdf.PdfReader(str(path))
                 pages_text = []
                 for idx, page in enumerate(reader.pages):
-                    page_str = page.extract_text() or ""
+                    try:
+                        page_str = page.extract_text(extraction_mode="layout") or ""
+                    except Exception:
+                        page_str = page.extract_text() or ""
+                    # Ensure fused serial numbers and roll numbers are cleanly separated (e.g. '3223102C0048' -> '32 23102C0048')
+                    page_str = re.sub(r'\b(\d{1,2})(23102[A-Za-z0-9]+)\b', r'\1 \2', page_str)
                     if page_str.strip():
                         pages_text.append(page_str)
                 content = "\n\n".join(pages_text)

@@ -113,8 +113,11 @@ class FailureTaxonomyAdvisor:
         if not failures:
             return {
                 "top_failure_subtype": "NONE",
+                "top_failure_count": 0,
                 "primary_vulnerable_component": "NONE",
-                "priority_recommendation": "System demonstrates high end-to-end fidelity across tested benchmarks."
+                "root_cause": "No retrieval or generation failures detected.",
+                "priority_recommendation": "System demonstrates high end-to-end fidelity across tested benchmarks.",
+                "all_mitigations": ["Maintain current retrieval parameters and prompt guardrails."]
             }
 
         counts: Dict[str, int] = {}

@@ -117,7 +117,23 @@ class ErrorDecomposer:
         grounding = self.grounding_evaluator.evaluate_groundedness(generated_answer, retrieved_chunks)
 
         # 4. Assign 4-Quadrant Decomposition
-        if retrieval_success and generation_success:
+        is_unanswerable_query = (
+            gold_evidence == "UNANSWERABLE_ADVERSARIAL_QUERY" or
+            g_eval.get("is_unanswerable_gold", False)
+        )
+
+        if is_unanswerable_query:
+            if g_eval["is_refusal"]:
+                quadrant = "SUCCESS"
+                primary_cause = "NONE"
+                subtype = "UNANSWERABLE_CORRECT_REFUSAL"
+                explanation = "Adversarial/unanswerable query: evidence does not exist in knowledge base and LLM appropriately refused."
+            else:
+                quadrant = "GENERATION_FAILURE"
+                primary_cause = "GENERATION_FAILURE"
+                subtype = "HALLUCINATION_UNSUPPORTED"
+                explanation = "Adversarial query: evidence does not exist in knowledge base, but LLM fabricated an answer."
+        elif retrieval_success and generation_success:
             quadrant = "SUCCESS"
             primary_cause = "NONE"
             subtype = "NONE"
@@ -145,16 +161,7 @@ class ErrorDecomposer:
             quadrant = "RETRIEVAL_FAILURE"
             primary_cause = "RETRIEVAL_FAILURE"
             # Check retrieval subtype
-            if r_eval.get("is_unanswerable", False):
-                if g_eval["is_refusal"]:
-                    quadrant = "SUCCESS"
-                    primary_cause = "NONE"
-                    subtype = "UNANSWERABLE_CORRECT_REFUSAL"
-                    explanation = "Adversarial/unanswerable query: evidence does not exist and LLM appropriately refused."
-                else:
-                    subtype = "HALLUCINATION_UNSUPPORTED"
-                    explanation = "Adversarial query: evidence does not exist in knowledge base, but LLM fabricated an answer."
-            elif r_eval["max_similarity"] < 0.35:
+            if r_eval["max_similarity"] < 0.35:
                 subtype = "MISSING_EVIDENCE"
                 explanation = "Top-K chunks contained no semantic overlap with the required ground-truth evidence."
             elif r_eval["precision_at_k"] < 0.3:

@@ -165,35 +165,47 @@ The framework is organized into cleanly separated functional layers:
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.1. Ingestion & Chunking (`src/ingestion/`)
+### 4.1. Ingestion, Hierarchical Chunking & Executive Summaries (`src/ingestion/`)
 * **Document Loader**: Ingests UTF-8 text, markdown, and multi-page PDF documents.
-* **Recursive Character Chunker**: Splits text using hierarchical delimiters (`\n\n`, `\n`, `. `, ` `) maintaining a sliding window of 400 characters with an 80-character overlap (20%). Each chunk retains metadata (unique ID, source document, chunk index, character bounds).
+* **Hierarchical Parent-Child Chunking**:
+  * Solves the fundamental trade-off between search precision and synthesis context.
+  * **Child Chunks (~250 characters, 40-char overlap)**: Fine-grained textual units indexed for dense embedding and BM25 sparse matching to maximize retrieval hit rank.
+  * **Parent Sections (~1200 characters, 150-char overlap)**: Coherent document sections stored alongside each child. During prompt generation, the system dynamically expands retrieved child hits to their full parent context while deduplicating overlaps.
+* **Executive Summary Generation & Meta-Query Routing**:
+  * At ingestion, a structured executive summary chunk is automatically generated for each document.
+  * When users submit broad overview queries ("summarize", "overview", "what is this document about"), the engine routes directly to the summary chunk, preventing retrieval failure on synthesis questions.
 
-### 4.2. Dual-Engine Hybrid Retrieval (`src/retrieval/`)
-* **Dense Semantic Retriever**:
-  * Embedding model: `sentence-transformers/all-MiniLM-L6-v2` (384-dimensional dense vectors, lightweight and fast on CPU).
-  * Vector Store: FAISS `IndexFlatIP` (Exact Inner Product on $L_2$-normalized vectors, computing cosine similarity in $\mathcal{O}(d \cdot M)$ time).
-* **Sparse Lexical Retriever**:
-  * BM25 Okapi (`rank-bm25`) with regex word tokenization, lowercasing, and term frequency saturation ($k_1=1.5, b=0.75$).
-* **Hybrid Reciprocal Rank Fusion (RRF)**:
-  Fuses dense semantic ranks and sparse lexical ranks without requiring score normalization:
-  $$\text{RRF\_Score}(d) = \sum_{m \in \{\text{dense}, \text{sparse}\}} \frac{1}{k + \text{rank}_m(d)}$$
-  Where smoothing constant $k = 60$.
+### 4.2. Two-Stage Retrieval Pipeline (`src/retrieval/`)
+* **Stage 1: Dual-Engine Hybrid Retrieval with Document Scoping**:
+  * **Dense Semantic Retriever**: `sentence-transformers/all-MiniLM-L6-v2` (384-dimensional dense vectors, running with strict offline caching via `local_files_only=True`).
+  * **Vector Store**: FAISS `IndexFlatIP` (Exact Inner Product on $L_2$-normalized vectors, computing cosine similarity in $\mathcal{O}(d \cdot M)$ time).
+  * **Sparse Lexical Retriever**: BM25 Okapi (`rank-bm25`) with regex word tokenization and term frequency saturation ($k_1=1.5, b=0.75$).
+  * **Reciprocal Rank Fusion (RRF)**: Fuses dense semantic and sparse lexical candidate pools ($k=60$).
+  * **Document-Scoped Filtering (`doc_id`)**: Allows users to toggle between **Focused Document Search** (filtering retrieval strictly to the uploaded document) and **Global Knowledge Base Search**, preventing multi-document lexical dilution.
+* **Stage 2: Cross-Encoder Reranking (`src/retrieval/reranker.py`)**:
+  * First-stage retrieval retrieves an expanded candidate pool ($K_{\text{cand}} = \max(2K, 6)$).
+  * The `CrossEncoderReranker` (`cross-encoder/ms-marco-MiniLM-L-6-v2`) performs all-to-all cross-attention between query and candidate passages, filtering out spurious lexical matches and ordering true context facts with calibrated sigmoid scores.
 
 ### 4.3. Generation & Model Management (`src/generation/`)
 * **LocalLLMClient**: Communicates with the local Ollama daemon via HTTP REST API (`/api/generate` and `/api/tags`).
 * **Zero-Setup Fallback Synthesizer**: If Ollama is not installed or offline, the system automatically activates an intelligent rule-based context extractor that synthesizes faithful answers from retrieved chunks, ensuring all tests and UI features work out of the box.
 * **Streaming Engine**: Yields tokens asynchronously for real-time word-by-word streaming in both the web UI and REST API.
 
-### 4.4. Real-Time Zero-Ground-Truth Self-Diagnostics
+### 4.4. Real-Time Sentence-Level NLI Self-Diagnostics (`src/evaluation/nli_grounding.py`)
 In daily production use, gold-standard answers $a^*$ are unavailable. The Core RAG Assistant implements a **Zero-Ground-Truth Diagnostic Engine** (`rag_app.diagnose()`):
-* Calculates cross-chunk semantic alignment between the generated answer $\hat{a}$ and the retrieved context $\mathcal{C}_K$.
-* Measures lexical containment and checks for refusal signals.
-* Produces instant visual health status:
-  * 🟢 **HEALTHY & FAITHFUL**: Strong context grounding, high relevance.
-  * 🟡 **WEAK RETRIEVAL / PARTIAL EVIDENCE**: Low semantic similarity between query and retrieved chunks.
-  * 🔴 **POTENTIAL HALLUCINATION / UNGROUNDED**: Low lexical/semantic overlap between answer and context chunks.
-  * ⚪ **EXPLICIT REFUSAL**: Legitimate refusal when knowledge is absent.
+* **Sentence Claim Decomposition**: Decomposes the generated response into discrete factual sentence claims.
+* **Cross-Encoder NLI Evaluation (`cross-encoder/nli-deberta-v3-small`)**:
+  * Evaluates each sentence against retrieved context chunks using full cross-attention Natural Language Inference.
+  * Classifies claims into:
+    * `ENTAILED`: Supported by context facts ($p_{\text{entail}} \ge \tau_F = 0.60$).
+    * `CONTRADICTION`: Directly contradicts facts asserted in the context ($p_{\text{contra}} \ge 0.50$).
+    * `UNSUPPORTED`: Hallucinated or external ungrounded assertion.
+* **Instant Diagnostic Badges**:
+  * 🟢 **HEALTHY & FAITHFUL**: 100% of claims entailed by retrieved context.
+  * 🟡 **WEAK RETRIEVAL / DISTRACTOR CONTEXT**: Low semantic similarity ($\cos < 0.38$) between query and retrieved chunks.
+  * 🔴 **DIRECT CONTEXT CONTRADICTION**: Explicit counter-factual claim identified by NLI.
+  * 🔴 **POTENTIAL HALLUCINATION**: Unentailed sentence claims detected.
+  * ⚪ **APPROPRIATE REFUSAL**: Model properly refused when evidence was missing.
 
 ---
 
@@ -226,6 +238,7 @@ NLP_Project/
 ├── PROJECT_EXPLANATION.md          # Complete project theory, architecture, and mathematics (This file)
 ├── REAL_LIFE_APPLICATIONS.md       # Concrete, actionable step-by-step real-world applications
 ├── VIVA_QUESTIONS_AND_ANSWERS.md   # Comprehensive viva voce exam preparation guide
+├── THRESHOLD_DERIVATION.md         # Empirical derivation & precision-recall tables for tau_R, tau_A, tau_S
 ├── requirements.txt                # Python dependencies
 ├── run_app.py                      # Multi-mode CLI launcher (--ui, --api, --test)
 │
@@ -235,24 +248,28 @@ NLP_Project/
 │       ├── charts.py               # Plotly Sankey diagrams, Waterfalls, Heatmaps, Sweeps
 │       └── inspector.py            # Side-by-side diagnostic cards and mitigation steps
 │
+├── scripts/                        # Utility & Calibration Scripts
+│   └── derive_thresholds.py        # Empirical threshold calibration sweep against validation benchmark
+│
 ├── src/                            # Business Logic & Algorithms
 │   ├── config.py                   # Global constants, paths, thresholds, and model defaults
 │   ├── core/
 │   │   └── rag_engine.py           # Decoupled RAG Controller & Live Self-Diagnostics
 │   ├── ingestion/
 │   │   ├── document_loader.py      # PDF / TXT / Markdown file readers
-│   │   └── chunker.py              # Recursive sliding window chunker with metadata
+│   │   └── chunker.py              # Hierarchical parent-child chunker (~250c child, ~1200c parent)
 │   ├── retrieval/
-│   │   ├── embedder.py             # SentenceTransformer wrapper
-│   │   ├── vector_store.py         # FAISS IndexFlatIP dense semantic search
-│   │   ├── bm25_retriever.py       # BM25 Okapi lexical sparse search
-│   │   └── hybrid_retriever.py     # Reciprocal Rank Fusion (RRF) search
+│   │   ├── embedder.py             # SentenceTransformer wrapper (offline enforced)
+│   │   ├── vector_store.py         # FAISS IndexFlatIP dense semantic search (with doc_id scoping)
+│   │   ├── bm25_retriever.py       # BM25 Okapi lexical sparse search (with doc_id scoping)
+│   │   ├── hybrid_retriever.py     # Reciprocal Rank Fusion (RRF) search
+│   │   └── reranker.py             # Cross-Encoder 2nd-stage reranker (ms-marco-MiniLM-L-6-v2)
 │   ├── generation/
 │   │   ├── llm_client.py           # Ollama client with automatic local fallback
-│   │   └── prompt_templates.py     # Grounded & Chain-of-Thought prompt formatters
+│   │   └── prompt_templates.py     # Grounded & Chain-of-Thought prompt formatters with parent expansion
 │   ├── evaluation/
 │   │   ├── metrics.py              # Lexical Token-F1, Rouge-L, and Semantic Similarity
-│   │   ├── nli_grounding.py        # Faithfulness and contextual hallucination checkers
+│   │   ├── nli_grounding.py        # Sentence-level Cross-Encoder NLI Faithfulness Scorer (nli-deberta-v3-small)
 │   │   ├── error_decomposer.py     # 4-Quadrant mathematical decomposition engine
 │   │   ├── failure_classifier.py   # 8-part diagnostic taxonomy & mitigation advisor
 │   │   └── ablation_engine.py      # Top-K sweeps, strategy comparisons, model ablation
@@ -266,6 +283,8 @@ NLP_Project/
 │
 └── tests/                          # Automated Verification
     ├── test_retrieval.py           # Unit tests for chunking, FAISS, BM25, and Hybrid RRF
+    ├── test_reranker.py            # Unit tests for Cross-Encoder 2nd-stage reranker
+    ├── test_nli_grounding.py       # Unit tests for Sentence-level NLI faithfulness & contradiction
     ├── test_decomposition.py       # Unit tests for 4 quadrants, error rates, and attributions
     ├── test_model_capability.py    # Unit tests for frozen-context cross-model comparison
     └── test_end_to_end.py          # End-to-end integration benchmark pipeline test
@@ -275,11 +294,13 @@ NLP_Project/
 
 ## 7. Verification & Automated Testing Suite
 
-The repository contains 12 automated unit and integration tests executing across 4 test modules:
-1. `tests/test_retrieval.py`: Tests document loading, recursive chunking bounds, FAISS dense indexing, BM25 score ranking, and Hybrid RRF ranking accuracy.
-2. `tests/test_decomposition.py`: Verifies mathematical integrity of the 4 quadrants ($Q1, Q2, Q3, Q4$), verifies that $\alpha_R + \alpha_G = 1.0$, and validates taxonomy classification rules.
-3. `tests/test_model_capability.py`: Validates that frozen context $\mathcal{C}_K$ is passed identically to multiple models and verifies differential failure logging.
-4. `tests/test_end_to_end.py`: Executes a full end-to-end pipeline run from raw query to retrieval, generation, evaluation, and diagnostic report generation.
+The repository contains 16 automated unit and integration tests executing across 6 test modules:
+1. `tests/test_retrieval.py`: Tests document loading, hierarchical chunking bounds, FAISS dense indexing, BM25 score ranking, and Hybrid RRF ranking accuracy.
+2. `tests/test_reranker.py`: Validates 2nd-stage Cross-Encoder relevance reordering and logit-to-sigmoid probability scaling.
+3. `tests/test_nli_grounding.py`: Validates sentence-level claim decomposition, NLI entailment scoring, and explicit context contradiction detection.
+4. `tests/test_decomposition.py`: Verifies mathematical integrity of the 4 quadrants ($Q1, Q2, Q3, Q4$), verifies that $\alpha_R + \alpha_G = 1.0$, and validates taxonomy classification rules.
+5. `tests/test_model_capability.py`: Validates that frozen context $\mathcal{C}_K$ is passed identically to multiple models and verifies differential failure logging.
+6. `tests/test_end_to_end.py`: Executes a full end-to-end pipeline run from raw query to retrieval, generation, evaluation, and diagnostic report generation.
 
 All tests run locally in under 60 seconds with:
 ```bash

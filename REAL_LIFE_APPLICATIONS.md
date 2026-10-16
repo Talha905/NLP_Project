@@ -16,7 +16,7 @@ Legal teams and compliance officers search thousands of pages of Master Service 
 #### Step 1: Ingest Your Target Legal Contracts
 1. Collect your target legal PDF or TXT contracts (e.g., `vendor_agreement_2026.pdf`, `gdpr_compliance_policy.pdf`).
 2. Copy them into `data/sample_docs/`, or open the web dashboard (`python run_app.py`) and use the **📁 Upload Custom Document** button.
-3. The system will recursively chunk the contracts using sliding windows with 20% overlap, storing chunk offsets and page source metadata.
+3. The system automatically applies **Hierarchical Parent-Child Chunking** (indexing 250c child chunks for fine-grained retrieval, while mapping them to 1200c parent sections for LLM context), generates an **Executive Summary chunk**, and indexes chunks into both FAISS dense and BM25 sparse indices with strict offline caching.
 
 #### Step 2: Create a Legal Evaluation Benchmark
 Create a ground-truth JSON file in `data/benchmarks/legal_benchmark.json` containing high-liability clauses:
@@ -42,10 +42,12 @@ Create a ground-truth JSON file in `data/benchmarks/legal_benchmark.json` contai
 #### Step 3: Run the Failure Decomposition
 1. In the sidebar, select **🔬 Failure Analysis Studio**.
 2. Navigate to **🧪 Benchmark Evaluator**, select `legal_benchmark.json` (or paste your samples), set **Search Strategy** to `Hybrid (Dense + BM25)`, and click **🚀 Run Diagnostic Evaluation**.
-3. Inspect the resulting **4-Quadrant Confusion Matrix**:
-   * If you see high **Quadrant 3 ($R=0, G=0$) with `TRUNCATION_BOUNDARY`**: The legal clause was sliced midway through an indemnity exception.
-     * **Action**: In `src/config.py`, increase `CHUNK_SIZE` from `400` to `800` characters and `CHUNK_OVERLAP` from `80` to `160` characters.
-   * If you see high **Quadrant 2 ($R=1, G=0$) with `CONTEXT_CONTRADICTION`**: The retriever found the clause, but the LLM inverted the negative condition (*"neither party's liability is capped"* interpreted as *"liability is capped"*).
+3. The **Two-Stage Cross-Encoder Reranker** (`cross-encoder/ms-marco-MiniLM-L-6-v2`) will refine candidate clauses, while the **Sentence-Level NLI Scorer** (`cross-encoder/nli-deberta-v3-small`) validates that each legal claim is entailed by the contract.
+4. In the Core Assistant, enable **Targeted Document Search** to isolate retrieval strictly to `vendor_agreement_2026.pdf` to eliminate multi-contract lexical dilution.
+5. Inspect the resulting **4-Quadrant Confusion Matrix**:
+   * If you see **Quadrant 3 ($R=0, G=0$) with `MISSING_EVIDENCE`**: The legal clause was diluted by distractor chunks.
+     * **Action**: Ensure **Targeted Document Search** is selected, or increase Top-$K$ from 3 to 5.
+   * If you see **Quadrant 2 ($R=1, G=0$) with `CONTEXT_CONTRADICTION`**: The retriever found the clause, but the LLM inverted the negative condition (*"neither party's liability is capped"* interpreted as *"liability is capped"*).
      * **Action**: In the sidebar, change **Prompt Strategy** from `grounded` to `cot` (Chain-of-Thought) and upgrade to `qwen2.5:3b` or `llama3.2:latest`.
 
 #### Step 4: Enable Real-Time Audit Alerts in Daily Chat
